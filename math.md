@@ -10,7 +10,7 @@ where $\theta = 0$ corresponds to the North facing direction and $\theta = \cfra
 
 $$ \bar{X} := \\{0,\dots,n+1\\}^2 \times \left \\{ 0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2} \right \\} $$
 
-so as to include the boundary of the grid world. From some $x \in X$ the robot can take actions from the *action space*, defined by the ordered set $$A := \{\text{wait}, \text{left}, \text{right}, \text{forward}\} \approx \{0,1,2,3\}$$.
+so as to include the boundary of the grid world. From some $x \in X$ the robot can take actions from the *action space*, defined by the ordered set $$A := \\{\text{wait}, \text{left}, \text{right}, \text{forward} \\} \approx \\{0,1,2,3\\}$$.
 
 Given some $x \in X$ and $a \in A$, the robot may transition to a new state $x'$ given by the map
 
