@@ -63,12 +63,13 @@ This graph has $\mathcal{O}(|E|) = \mathcal{O}(n^2)$ and $\mathcal{O}(|V|) = \ma
 
 ## Multirobot Path Planning - States, Actions, Transition Function
 
-The multirobot case is constructed similarly to the single robot case, but has exponentially worse complexity. Given $m$ robots, the joint statespace is the product set $X^m$, and the joint action space $A^m$, so that at some epoch, a robot $j \in \{1,\dots,m\}$ may take action $a_j \in A$ at state $x_j \in X$.
+The multirobot case is constructed similarly to the single robot case, but has exponentially worse complexity. Given $m$ robots, the joint statespace is the product set $X^m$, and the joint action space $A^m$, so that at some epoch, a robot $j \in \\{1,\dots,m \\}$ may take action $a_j \in A$ at state $x_j \in X$.
 
 The joint transition function is denoted
 
 $$ F: X^m \times A^m $$
-$$ F(x,a) = x' \iff x'_i = f(x_i,a_i) \hspace{2mm} \forall i \in \{1,\dots,m\}$$
+
+$$ F(x,a) = x' \iff x'_i = f(x_i,a_i) \hspace{2mm} \forall i \in \\{1,\dots,m \\}$$
 
 this map operates on compound states $x \in X^m$ and joint actions $a \in A^m$.
 
@@ -77,9 +78,9 @@ this map operates on compound states $x \in X^m$ and joint actions $a \in A^m$.
 The permissible actions for the multirobot case are implicitly defined by extending the mapping $S$ to the multirobot case in the following way:
 
 $$ S: X^m \to \mathbb{P}(X^m)$$
-$$(x) \mapsto S(x) := \{x' \in X^m | S_{p(x'_i)} = 0 \text{ and } p(x'_i) \neq p(x'_j) \text{, for all } j \neq i \}$$
+$$(x) \mapsto S(x) := \\{x' \in X^m | S_{p(x'_i)} = 0 \text{ and } p(x'_i) \neq p(x'_j) \text{, for all } j \neq i \\}$$
 
-here, $p:X \to \{1,\dots,n\}^2$ is the position map, which acts as $p((i,j,\psi)) \mapsto (i,j)$.
+here, $p:X \to \\{1,\dots,n \\}^2$ is the position map, which acts as $p((i,j,\psi)) \mapsto (i,j)$.
 
 As for the cost, it is now a map $C: X^m \mapsto \mathbb{R}^m$, and can be constructed from the single robot cost tensor $C_{ij}^a$ modified to be congruent with $S$ so that impermissible actions result in infinite costs i.e. given $x' = f(x,a)$ satisfies the formulas
 
