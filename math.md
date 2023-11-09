@@ -38,7 +38,7 @@ $$ x \mapsto S(x) $$
 
 so that at a state $x$, the action $a$ is permissible if and only if $f(x,a) \in S(x)$. 
 
-In the case for a single robot in a static environment, the mapping $S$ can be represented by a matrix $S_{ij}$ of ones and zeros, with $1$ corresponding to obstacle, and $0$ corresponding to free space. In this way, $x \mapsto S(x) := \{ (i,j,\psi) \in X | S_{ij} = 0\}$.
+In the case for a single robot in a static environment, the mapping $S$ can be represented by a matrix $S_{ij}$ of ones and zeros, with $1$ corresponding to obstacle, and $0$ corresponding to free space. In this way, $x \mapsto S(x) := \\{ (i,j,\psi) \in X | S_{ij} = 0 \\}$.
 
 Taking an action $a$ at a state $x$ results in a positive cost
 
