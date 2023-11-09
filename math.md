@@ -8,7 +8,7 @@ $$ X := \\{1,\dots,n\\}^2 \times \left \\{0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2}\r
 
 where $\theta = 0$ corresponds to the North facing direction and $\theta = \cfrac{\pi}{2}$ is West facing. In addition, we define the *closure* of $X$, denoted $\bar{X}$ as 
 
-$$ \bar{X} := \{0,\dots,n+1\}^2 \times \left \{ 0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2} \right \} $$
+$$ \bar{X} := \\{0,\dots,n+1\\}^2 \times \left \\{ 0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2} \right \\} $$
 
 so as to include the boundary of the grid world. From some $x \in X$ the robot can take actions from the *action space*, defined by the ordered set $$A := \{\text{wait}, \text{left}, \text{right}, \text{forward}\} \approx \{0,1,2,3\}$$.
 
