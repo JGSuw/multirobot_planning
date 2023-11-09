@@ -4,7 +4,7 @@ The scope of this document is to describe as concisely as possible the mathemati
 ## Single Robot Planning - States, Actions, Transition Function
 A single robot, moving from an initial position and orientation, to a final position and orientation, in an $ n \times n $ grid-world with obstacles. The position and orientation of the robot are represented by elements of the set
 
-$$ X := \{1,\dots,n\}^2 \times \left \{0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2}\right \} $$
+$$ X := \{1,\dots,n\}^2 \times \{0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2} \} $$
 
 where $\theta = 0$ corresponds to the North facing direction and $\theta = \cfrac{\pi}{2}$ is West facing. In addition, we define the *closure* of $X$, denoted $\bar{X}$ as 
 
