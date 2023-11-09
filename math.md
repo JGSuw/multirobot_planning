@@ -1,30 +1,50 @@
 # Intro
 The scope of this document is to describe as concisely as possible the mathematical definition of the multirobot path planning problem. We begin with a single robot case, formulated to leverage network algorithms (djikstra).
 
-## Single Robot Planning
-A single robot, moving from an initial position and orientation, to a final position and orientation, in an $ n \times x $ grid-world with obstacles. The position and orientation of the robot are represented by elements of the set
+## Single Robot Planning - States, Actions, Transition Function
+A single robot, moving from an initial position and orientation, to a final position and orientation, in an $ n \times n $ grid-world with obstacles. The position and orientation of the robot are represented by elements of the set
 
+$$ X := \{1,\dots,n\}^2 \times \left\{0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2}\right\} $$
 
-$ V := \{1, \cdots, n\}^2 \times O $ where $ O $ are the *orientations* $ \{N,S,E,W\} $.
+where $\theta = 0$ corresponds to the North facing direction and $\theta = \cfrac{\pi}{2}$ is West facing. In addition, we define the *closure* of $X$, denoted $\bar{X}$ as 
 
-In addition, there is an action set $A := O \cup \{ \emptyset \}$ where $d \in O$ represents motion in the direction $d$ and $\emptyset$ is the null-action (no motion of the robot).
+$$ \bar{X} := \{0,\dots,n+1\}^2 \times \left\{0,\cfrac{\pi}{2},\pi,\cfrac{3\pi}{2}\right\} $$
 
-Given an action $a \in A$, the action *acts* upon vertices $(i,j,o) \mapsto a(i,j,o) := \dots \in \{0, \cdots, n+1\}^2 \times O$
+so as to include the boundary of the grid world. From some $x \in X$ the robot can take actions from the *action space*, defined by the ordered set $$A := \{\text{wait}, \text{left}, \text{right}, \text{forward}\} \approx \{0,1,2,3\}$$.
 
-Next, we have a obstacle map $X: \{1,\cdots, n\}^2 \to \{0,1\}$ where $X(i,j) = 0$ means there is no obstacle at location $(i,j)$ and vis versa.
+Given some $x \in X$ and $a \in A$, the robot may transition to a new state $x'$ given by the map
 
-Finally, we have a cost-mapping that represents to the cost to move between verticies in $V$, written as
+$$ f: X \times A \mapsto \bar{X} $$
+$$ (x,a) \mapsto f(x,a) = x' $$
 
-$$ C: V \times A \mapsto \mathbb{R} $$
+this transition function is so defined:
 
-where $\forall v \in V, \forall a \in A : C(v,a) > 0$ and
+$$
+f((i,j,\psi),a) := \begin{cases}
+ (i,j,\psi), & \text{for } a = 0 \\
+ (i,j,\psi-.5\pi), & \text{for } a = 1 \\
+ (i,j,\psi+.5\pi), & \text{for } a = 2 \\
+ (i-\sin\psi, j-\cos\psi, \psi), & \text{for } a = 3
+\end{cases}
+$$
 
-$$a(v) \not \in V \lor X(a(v)) = 1 \implies C(v,a) = \infty $$
+## Single Robot Planning - Constraints, Costs, and Graph Representation
 
-hence $C(v,a)$ is infinite if taking the action $a$ at vertex $v$ is impossible (or otherwise results in some collision).
+In a given state only some actions are permissible, due to the presence of obstacles or the boundary of the space. This is expressed by restricting the post action state $x'$ from a given state $x$ via the mapping 
 
-### Remark on the computtional complexity of Dijkstra's Algorithm.
+$$ S: X \to \mathbb{P}(X) $$
 
-The above problem, when represented as a graph, has $|V|$ vertices and $\mathcal{O}(|V|)$ edges. Using Dijkstra's algorithm to compute the shortest paths gives a worst-case asymptotic performance of $\mathcal{O}\left(|E| + |V|\log |V|\right) = \mathcal{O} (|V| \log |V|)$, which expands to 
+$$ x \mapsto S(x) $$
 
-$$ \mathcal{O} (n^2 \log (n) )$$
+so that at a state $x$, the action $a$ is permissible if and only if $f(x,a) \in S(x)$. Taking an action $a$ at a state $x$ results in a positive cost
+
+$$C: X \times A \to \mathbb{R} $$
+$$ (x,a) \mapsto C(x,a) $$
+
+which is congruent with the permissible actions in the following sense:
+
+$$ \forall (x,a) \in X \times A: f(x,a) \not \in S(x) \implies C(x,a) = \infty$$
+
+Using these maps, we can construct a graph $(X,E)$ suitable for using Dijkstra's algorithm to compute shortest paths:
+
+$$ \forall (x,a) \in X \times A: (x,f(x,a),C(x,a)) \in E \iff f(x,a) \in S(x) $$
