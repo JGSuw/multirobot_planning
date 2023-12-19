@@ -6,6 +6,7 @@ import matplotlib.animation as animation
 import copy
 import heapq
 
+# Enum of possible actions
 class Action:
     NUM_ACTIONS = 5
     UP = 0
@@ -14,10 +15,7 @@ class Action:
     RIGHT = 3
     WAIT = 4
 
-class EnvironmentException(Exception):
-    def __init__(self, str):
-        super.__init__(self, str)
-
+# Represents the world inhabited by robots and obstacles
 class Environment:
     FREE = 0
     OBSTACLE = 1
@@ -48,6 +46,7 @@ class Environment:
             self.grid[positions[i]] = self.AGENT
             self.agent_pos[j] = positions[i]
 
+# draw the state of the provided environment
 def draw_environment(ax, env, goals, arrows=True, animated=False):
     mat = np.zeros(np.shape(env.grid), dtype=int)
     for loc in env.obstacle_pos:
@@ -78,6 +77,7 @@ def draw_environment(ax, env, goals, arrows=True, animated=False):
             ax.arrow(start_x, start_y, dx, dy, head_width = 0.2, head_length = 0.2, alpha=.5)
     return image
 
+# Generates a random environment with n_obstacles obstacles
 def random_problem(size, n_agents: int, n_obstacles: int, seed=None):
     if seed == None:
         rng = np.random.default_rng()
@@ -101,6 +101,7 @@ def random_problem(size, n_agents: int, n_obstacles: int, seed=None):
     obstacle_pos = [tuple(loc[i]) for i in obstacle_idx]
     return Environment(size, obstacle_pos, agent_pos), goal_pos
 
+# Represents a vertex in an agent trajectory
 class PathVertex:
     def __init__(self, pos: tuple, time: int):
         self.pos = pos
@@ -556,7 +557,6 @@ def ma_cbs(prob):
             # construct a mapf solution from the subproblem solutions
             agent_finder = {}
             for meta_agent in meta_agents:
-                print(meta_agent.agent_ids)
                 for j, id in enumerate(meta_agent.agent_ids):
                     agent_finder[id] = (meta_agent, j)
             paths = []
@@ -572,6 +572,7 @@ def ma_cbs(prob):
                 solutions[new_meta_agent] = None
             meta_agents = list(solutions.keys())
 
+# Class is used to build videos of solutions to MAPF problems.
 class MAPFAnimation:
     def __init__(self, prob, solution):
         self.prob = prob
