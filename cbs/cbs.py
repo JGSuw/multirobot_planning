@@ -27,28 +27,28 @@ class Environment:
         self.obstacle_pos = obstacle_pos
         self.agents = list(range(len(agent_pos)))
         self.agent_pos = agent_pos
-        self.grid = np.zeros(size,dtype=int)
-        for (i,j) in obstacle_pos:
-            self.grid[i,j] = self.OBSTACLE
-        for i, idx in enumerate(agent_pos):
-            self.grid[idx] = self.AGENT
-    
+        self.size = size
+        self.data = {}
+        for cartesian_index in obstacle_pos:
+            self.data[cartesian_index] = self.OBSTACLE
+        for i, cartesian_index in enumerate(agent_pos):
+            self.data[cartesian_index] = self.AGENT
     
     def get_obstacles(self):
-        return np.copy(self.obstacle_pos)
+        return copy.deepcopy(self.obstacle_pos)
     
     def get_agents(self):
-        return np.copy(self.agent_pos)
+        return copy.deepcopy(self.agent_pos)
     
     def update_agent_pos(self, ids, positions):
         for i,j in enumerate(ids):
-            self.grid[self.agent_pos[j]] = self.FREE
-            self.grid[positions[i]] = self.AGENT
+            del self.data[self.agent_pos[j]]
+            self.data[positions[i]] = self.AGENT
             self.agent_pos[j] = positions[i]
 
 # draw the state of the provided environment
 def draw_environment(ax, env, goals, arrows=True, animated=False):
-    mat = np.zeros(np.shape(env.grid), dtype=int)
+    mat = np.zeros(env.size, dtype=int)
     for loc in env.obstacle_pos:
         mat[loc] = env.OBSTACLE
 
@@ -265,15 +265,15 @@ def single_agent_astar(env: Environment, id: int, goal: tuple, constraints=None,
         if pos[1] > 0:
             v = PathVertex((pos[0], pos[1]-1), t+1)
             edge = PathEdge(pos, v.pos, t)
-            if (env.grid[v.pos] != env.OBSTACLE):
+            if (v.pos not in env.data) or (env.data[v.pos] != env.OBSTACLE):
                 if (v not in _constraints) and (edge not in _constraints):
                     new_nodes.append(v)
 
         # PathVertex resulting from DOWN 
-        if pos[1]+1 < np.size(env.grid, 1):
+        if pos[1]+1 < env.size[1]:
             v = PathVertex((pos[0], pos[1]+1), t+1)
             edge = PathEdge(pos, v.pos, t)
-            if (env.grid[v.pos] != env.OBSTACLE):
+            if (v.pos not in env.data) or (env.data[v.pos] != env.OBSTACLE):
                 if (v not in _constraints) and (edge not in _constraints):
                     new_nodes.append(v)
 
@@ -281,15 +281,15 @@ def single_agent_astar(env: Environment, id: int, goal: tuple, constraints=None,
         if pos[0] > 0:
             v = PathVertex((pos[0]-1, pos[1]), t+1)
             edge = PathEdge(pos, v.pos, t)
-            if (env.grid[v.pos] != env.OBSTACLE):
+            if (v.pos not in env.data) or (env.data[v.pos] != env.OBSTACLE):
                 if (v not in _constraints) and (edge not in _constraints):
                     new_nodes.append(v)
 
         # PathVertex resulting from RIGHT
-        if pos[0]+1 < np.size(env.grid,0):
+        if pos[0]+1 < env.size[0]:
             v = PathVertex((pos[0]+1, pos[1]), t+1)
             edge = PathEdge(pos, v.pos, t)
-            if (env.grid[v.pos] != env.OBSTACLE):
+            if (v.pos not in env.data) or (env.data[v.pos] != env.OBSTACLE):
                 if (v not in _constraints) and (edge not in _constraints):
                     new_nodes.append(v)
 
@@ -515,7 +515,7 @@ def make_ma_subproblem(prob, meta_agent):
     goals = [prob.goals[i] for i in meta_agent.agent_ids]
     agent_pos = [prob.env.agent_pos[i] for i in meta_agent.agent_ids]
     obstacle_pos = prob.env.obstacle_pos
-    size = np.shape(prob.env.grid)
+    size = prob.env.size
     return MAPFProblem(Environment(size, obstacle_pos, agent_pos), goals)
 
 # Implementation of MA-CBS
