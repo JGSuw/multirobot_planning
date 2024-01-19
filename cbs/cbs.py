@@ -5,6 +5,7 @@ from matplotlib.colors import ListedColormap as ListedColorMap
 import matplotlib.animation as animation
 import copy
 import heapq
+import time
 
 # Enum of possible actions
 class Action:
@@ -42,10 +43,16 @@ class Environment:
     
     def update_agent_pos(self, ids, positions):
         for i,j in enumerate(ids):
-            del self.data[self.agent_pos[j]]
+            if self.agent_pos[j] in self.data:
+                del self.data[self.agent_pos[j]]
             self.data[positions[i]] = self.AGENT
             self.agent_pos[j] = positions[i]
 
+    def dense_matrix(self):
+        mat = np.zeros(self.size, dtype=int)
+        for pos in self.data:
+            mat[pos] = self.data[pos]
+        return mat
 # draw the state of the provided environment
 def draw_environment(ax, env, goals, arrows=True, animated=False):
     mat = np.zeros(env.size, dtype=int)
@@ -399,6 +406,19 @@ class MAPFProblem:
         self.env = environment
         self.goals = goals
 
+    def to_nparray(self, channel_padding = 0, agent_mask = []):
+        N = len(self.goals) + channel_padding
+        matshape = (*self.env.size, 2*N+1)
+        mat = np.zeros(matshape, dtype=np.byte)
+        for i, pos in enumerate(self.env.obstacle_pos):
+            mat[*pos,0] = 1
+        for i, pos in enumerate(self.env.agent_pos):
+            if pos not in agent_mask:
+                mat[*pos,i+1] = 1
+        for i, pos in enumerate(self.goals):
+            mat[*pos,(N+1)+i] = 1
+        return mat
+
 # Represents a MAPF solution
 class MAPFSolution:
     def __init__(self, paths):
@@ -420,6 +440,12 @@ class MAPFSolution:
                     arr.append(None)
             mat = np.vstack((mat, arr)) 
         return np.array_str(mat)
+    
+    def path_lengths(self):
+        return [len(p) for p in self.paths]
+
+    def makespan(self):
+        return sum(self.path_lengths())
 
 # Low level solving stage of CBS, computes constrained shortest paths
 # by invoking single_agent_astar for all agents, given node constraints
@@ -440,8 +466,8 @@ def low_level_solve(prob, node):
         else:
             return
 
-def conflict_based_search(prob):
-    M = len(prob.env.agent_pos)
+def conflict_based_search(prob, maxtime = 120.):
+    t0 = time.perf_counter()
     # compute individual paths for root node
     root = CBSNode()
     low_level_solve(prob, root)
@@ -452,11 +478,12 @@ def conflict_based_search(prob):
     # place root node into priority queue
     queue = [root]
     while len(queue) > 0:
+        if (time.perf_counter() - t0) > maxtime:
+            return None
         # pop top of queue and check for conflicts
         node = heapq.heappop(queue)
         conflicts = detect_conflicts(node.paths)
         if len(conflicts) > 0:
-            # print("Branching")
             i,j,c = conflicts[0]
             left_node, right_node = node.branch(i,j,c)
         else: # if no conflicts, then return solution
