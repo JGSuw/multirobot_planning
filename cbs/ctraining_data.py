@@ -74,14 +74,14 @@ agents that satisfy agents_on_boundary(agent_pos).
 def mapfprob2ffconvtensor(problem: cbs.MAPFProblem, solution: cbs.MAPFSolution):
     W,H = problem.env.size
     N = int(math.sqrt(W**2+H**2)/math.sqrt(2))
-    x = torch.zeros((W,H,2*N+1), dtype=torch.int8)
+    x = torch.zeros((2*N+1,W,H), dtype=torch.int8)
     y = torch.zeros(N, dtype=torch.short)
     for pos in problem.env.obstacle_pos:
-        x[*pos, 0] = 1
+        x[0, *pos] = 1
     for i in range(len(problem.goals)):
         pos = problem.env.agent_pos[i]
         if agent_on_boundary(W,H,pos):
-            x[*pos, i+1] = 1
+            x[i+1, *pos] = 1
             y[i] = len(solution.paths[i])
         pos = problem.goals[i]
         x[*pos, N+i+1] = 1
@@ -108,8 +108,8 @@ class ColumnLatticeDataset(Dataset):
                     solution = data['solution']
                     if solution is not None:
                         x,y = mapfprob2ffconvtensor(problem, solution)
-                        self.X.append(x)
-                        self.Y.append(y)
+                        self.X.append(data['problem'])
+                        self.Y.apend(data['solution'])
         self.len = len(self.Y)
 
     def __len__(self):
@@ -124,7 +124,7 @@ class ColumnLatticeDataset(Dataset):
     agents that satisfy agents_on_boundary(agent_pos).
     """
     def __getitem__(self, idx):
-        return self.X[idx], self.Y[idx]
+        return mapfprob2ffconvtensor(self.X[idx], self.Y[idx])
 
 import multiprocessing
 import pickle

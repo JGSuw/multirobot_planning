@@ -72,6 +72,7 @@ def task(args):
 if __name__ == "__main__":
     n_cpus = 4
     with multiprocessing.Pool(n_cpus) as p:
-        total_examples = 1000
-        seeds = np.random.randint(0,2**16 - 1, n_cpus)
+        total_examples = 10000
+        # seeds = np.random.randint(0,2**16 - 1, n_cpus)
+        seeds = [18427, 31072, 53165]
         p.map(task, [(seed, total_examples//n_cpus) for seed in seeds])
