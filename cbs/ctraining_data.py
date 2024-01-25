@@ -8,20 +8,14 @@ import torch
 Generates a set of obstacle positions for the unit cell of a "column lattice" type environment.
 """
 class ColumnLatticeCell():
-    def __init__(self, W: int, H: int, dx: int, dy: int):
-        Cx = int((W-3*dx)/2)
-        Cy = int((H-3*dy)/2)
-        if Cx <= 0:
-            raise Exception("Cx = int((W-4*dx)/2) must be greater than 0")
-        if Cy <= 0:
-            raise Exception("Cy = int((H-4*dy)/2) must be greater than 0")
+    def __init__(self, Cx: int, Cy: int, dx: int, dy: int):
         
-        self.size = (2*Cx+3*dx+1, 2*Cy+3*dy+1)
+        self.size = (2*Cy + 4*dy, 2*Cx + 4*dx)
         self.obstacle_pos = []
         for i in range(2):
             for j in range(2):
-                col = i*(Cx+1*dx)+dx
-                row = j*(Cy+1*dy)+dy
+                col = i*(Cx+2*dx)+dx
+                row = j*(Cy+2*dy)+dy
                 self.obstacle_pos += [(row+k, col+l) for k in range(Cy) for l in range(Cx)]
 
 """
@@ -62,7 +56,7 @@ def agent_on_boundary(W,H,pos):
         return True
     return False
 
-def congestion_features(problem: cbs.MAPFProblem, boundary_agents):
+def congestion_features(problem: cbs.MAPFProblem, boundary_agents, heuristic_solutions):
         # solve for a* paths for individual agents
         env = problem.env
         H,W = env.size
@@ -77,14 +71,15 @@ def congestion_features(problem: cbs.MAPFProblem, boundary_agents):
         for i, pos in enumerate(env.obstacle_pos):
             maps[0,*pos] = 1
 
-        # populate agent a* paths
-        astar_delays = torch.zeros(N, dtype=torch.float)
-        
+        # populate the heuristic solutions for agents on boundary
+        heuristic = torch.zeros(N,dtype=torch.float)
         for i, agent in enumerate(boundary_agents):
-            path, cost = cbs.single_agent_astar(env, agent, goals[agent])
-            astar_delays[i] = cost
+            start = env.agent_pos[agent]
+            goal = goals[agent]
+            path, heuristic[i] = heuristic_solutions[(start,goal)]
             for t,v in enumerate(path.vertexes):
                 maps[1+i, *v.pos] = t+1
+
 
         # populate goal location for unknown agents
         offset = 1+len(boundary_agents)
@@ -97,7 +92,7 @@ def congestion_features(problem: cbs.MAPFProblem, boundary_agents):
         for i in range(N):
             if i < len(boundary_agents):
                 output_mask[i] = 1
-        return maps, astar_delays, output_mask
+        return maps, heuristic, output_mask
 
 """
 Takes a MAPFProblem and associated MAPFSolution, and returns a tuple 
@@ -145,6 +140,23 @@ class ColumnLatticeDataset(Dataset):
                     if data['solution'] is not None:
                         self.X.append(data['problem'])
                         self.Y.append(data['solution'])
+
+        # compute A* shortest paths from all initial boundary nodes, to all final boundary nodes
+        H,W = copy.deepcopy(self.X[0].env.size)
+        obstacle_pos = copy.deepcopy(self.X[0].env.obstacle_pos)
+        self.heuristic_solutions = {}
+        positions = []
+        for i in range(H):
+            for j in range(W):
+                if agent_on_boundary(W, H, (i,j)):
+                    positions.append((i,j))
+
+        for start in positions:
+            for goal in positions:
+                if start != goal:
+                    env = cbs.Environment((W,H), obstacle_pos, [start])
+                    self.heuristic_solutions[(start,goal)] = cbs.single_agent_astar(env, 0, goal)
+
         self.len = len(self.Y)
 
     def __len__(self):
@@ -166,7 +178,7 @@ class ColumnLatticeDataset(Dataset):
         solution = self.Y[idx]
         agent_pos = problem.env.agent_pos
         agents_on_boundary = [i for i in range(len(problem.goals)) if agent_on_boundary(W,H,agent_pos[i])]
-        features = congestion_features(self.X[idx], agents_on_boundary)
+        features = congestion_features(self.X[idx], agents_on_boundary, self.heuristic_solutions)
         labels = torch.zeros(N, dtype=torch.float)
         for i, agent in enumerate(agents_on_boundary):
             labels[i] = len(solution.paths[agent])
@@ -183,7 +195,7 @@ Subprocess routine for generating training / test data.
 def task(args):
     seed, num_examples = args
     rng = np.random.default_rng(seed=seed)
-    cell = ColumnLatticeCell(15,15,2,2)
+    cell = ColumnLatticeCell(3,3,2,2)
     for i in range(num_examples):
         prob = gen_column_lattice_problem(cell, rng=rng)
         soln = cbs.conflict_based_search(prob, maxtime=3.)
@@ -205,9 +217,9 @@ If this file is run at the level of main, it will spawn 4 processes
 that execute task(args) to generate 100,000 training/test examples.
 """
 if __name__ == "__main__":
-    n_cpus = 4
+    n_cpus = 8
     with multiprocessing.Pool(n_cpus) as p:
-        total_examples = 100000
-        seeds = [18427, 31072, 53165, 57585]
-        # seeds = np.random.randint(0,2**16 - 1, n_cpus)
+        total_examples = 80000 
+        # seeds = [18427, 31072, 53165, 57585]
+        seeds = np.random.randint(0,2**16 - 1, n_cpus)
         p.map(task, [(seed, total_examples//n_cpus) for seed in seeds])
