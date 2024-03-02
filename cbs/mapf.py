@@ -58,9 +58,8 @@ class GridWorld(Environment):
         return mat
 
 # draw the state of the provided environment
-def draw_environment(ax, env: Environment, agent_pos: dict, goals: dict, arrows=True, animated=False):
+def draw_environment(ax, env: Environment, agent_pos: dict, goals: dict, arrows=True, animated=False, grid=False):
     tab20b = colormaps.get_cmap('tab20b')
-    agent_ids = [id for id in agent_pos]
     colors = tab20b(list(range(20)))
     black = np.array([0,0,0,1])
     white = np.array([1, 1, 1, 1])
@@ -73,6 +72,22 @@ def draw_environment(ax, env: Environment, agent_pos: dict, goals: dict, arrows=
     
     cmap = ListedColorMap(colors)
     image = ax.imshow(mat, cmap=cmap, animated=True)
+
+    if grid:
+        # Major ticks
+        ax.set_xticks(np.arange(0, mat.shape[1], 1))
+        ax.set_yticks(np.arange(0, mat.shape[0], 1))
+
+
+        # Minor ticks
+        ax.set_xticks(np.arange(-.5, mat.shape[1], 1), minor=True)
+        ax.set_yticks(np.arange(-.5, mat.shape[0], 1), minor=True)
+
+        # Gridlines based on minor ticks
+        ax.grid(which='minor', color='black', linestyle='-', linewidth=1)
+
+        # Remove minor ticks
+        ax.tick_params(which='minor', bottom=False, left=False)
 
     # make arrows pointing agents to their goals
     if arrows:
@@ -142,7 +157,7 @@ class PathEdge(Constraint):
         if self.t == other.t:
             if self.p1==other.p1 and self.p2==other.p2:
                 return True
-            if self.p2==other.p1 and self.p2==other.p2:
+            if self.p1==other.p2 and self.p2==other.p1:
                 return True
         return False
     
