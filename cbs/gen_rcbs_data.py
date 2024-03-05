@@ -1,5 +1,5 @@
 from mapf import *
-from regional_mapf import *
+from rcbs import *
 import numpy as np
 import networkx as nx
 import pickle
@@ -9,90 +9,15 @@ import time
 from datetime import date
 import functools
 
-def random_problem(N_agents: int, 
-                   env: ColumnLatticeEnvironment, 
-                   path_cutoff: int,
-                   rng = np.random.default_rng()):
-    # assign start locations to agents
-    start_regions = {}
-    start_pos = {}
-    nodes = list(env.region_graph.nodes)
-    for id in range(N_agents):
-        start_regions[id] = R = nodes[rng.choice(len(nodes))]
-        sub_env = env.region_graph.nodes[R]['env']
-        locs = [p 
-                for p in sub_env.G.nodes if p not in start_pos.values() and 
-                    all(sub_env.contains_node(u) 
-                    for u in env.gridworld.G.adj[p])]
-        start_pos[id] = locs[rng.choice(len(locs))]
-
-    # assign random final goal regions
-    final_goal_regions = {}
-    final_goals = {}
-    shortest_path_lens = dict(nx.shortest_path_length(env.region_graph))
-    for id in start_regions:
-        R1 = start_regions[id]
-        choices = [R2 for R2 in shortest_path_lens[R1] if shortest_path_lens[R1][R2] < path_cutoff]
-        final_goal_regions[id] = R2 = choices[rng.choice(len(choices))]
-        sub_env = env.region_graph.nodes[R2]['env']
-        locs = [p 
-                for p in sub_env.G.nodes if p not in final_goals.values() and
-                all(sub_env.contains_node(u)
-                    for u in env.gridworld.G.adj[p])]
-        final_goals[id] = locs[rng.choice(len(locs))]
-
-    # assemble trip graph with 1-weight edges initially
-    trip_graph = nx.Graph()
-    for v1 in env.region_graph.nodes:
-        edges = []
-        for v2 in env.region_graph.adj[v1]:
-            edges.append((v1,v2,0))
-        trip_graph.add_weighted_edges_from(edges, weight='c')
-
-    # generate regional paths for agents
-    region_paths = {}
-    for id in start_regions:
-        R1 = start_regions[id]
-        R2 = final_goal_regions[id]
-        if R1 == R2:
-            region_paths[id] = [R1]
-            continue
-
-        region_paths[id] = path = [R for R in nx.shortest_path(trip_graph, R1, R2, weight='c')]
-        for i in range(len(path)-1):
-                u = path[i]
-                v = path[i+1]
-                e = (u,v)
-                trip_graph.edges[e]['c']+=1
-
-    partial_paths = dict((R, {}) for R in env.region_graph.nodes)
-    for id in region_paths:
-        R = region_paths[id][0]
-        path = Path([PathVertex(start_pos[id], 0)])
-        partial_paths[R][id] = path
-
-    return partial_paths, region_paths, final_goals
-
 def solve_problem(env: RegionalEnvironment, 
-                  partial_paths: dict, 
+                  start_vertex: dict, 
                   region_paths: dict, 
                   final_goals: dict,
                   omega: float):
-    node = rcbs_init(env, partial_paths, region_paths, final_goals)
-    update_rcbsnode(env, node, [R for R in partial_paths], omega, 30., False)
-    result = rcbs(env, node, omega, maxtime=60., cbs_maxtime=30.)
-    if result is not None:
-        node = result[0]
-        paths = {}
-        for id in node.region_paths:
-            region_path = node.region_paths[id]
-            for R in region_path:
-                path = node.partial_paths[R][id]
-                if id not in paths:
-                    paths[id] = path
-                else:
-                    paths[id] += path
-        return MAPFSolution(paths)
+    root = init_rcbs(env, start_vertex, final_goals, region_paths)
+    result = regional_cbs(root, env, omega, maxtime=30.)
+    if type(result) == RCBSNode:
+        return result.make_solution()
     else:
         return None
 
@@ -111,18 +36,19 @@ def main(N_problems: int,   # number of problems to solve
 
     proc_dir = os.path.join(dir, f'{seed}')
     os.makedirs(proc_dir)
-    env = ColumnLatticeEnvironment(nrows, ncols, colh, colw, dy, dx, 1, 1)
+    env = ColumnLatticeEnvironment(nrows, ncols, colh, colw, dy, dx, 2, 2)
     save_environment(env, proc_dir)
     rng = np.random.default_rng(seed=seed)
     for i in range(N_problems):
         problem_data = random_problem(N_agents, env, path_cutoff, rng=rng)
-        partial_paths = problem_data[0]
-        region_paths = problem_data[1]
-        final_goals = problem_data[2]
-        save_problem(partial_paths, region_paths, final_goals, os.path.join(proc_dir, f'problem_{i}.pickle'))
-        solution = solve_problem(env, partial_paths, region_paths, final_goals, omega)
+        start_vertex = problem_data[0]
+        final_goals = problem_data[1]
+        region_paths = problem_data[2]
+        save_problem(start_vertex, region_paths, final_goals, os.path.join(proc_dir, f'problem_{i}.pickle'))
+        clock_start = time.time()
+        solution = solve_problem(env, start_vertex, region_paths, final_goals, omega)
         if solution is not None:
-            print(f'Worker {seed} solved MAPF problem {i+1}/{N_problems}')
+            print(f'Worker {seed} solved MAPF problem {i+1}/{N_problems} in {time.time()-clock_start} seconds.')
             save_solution(solution, os.path.join(proc_dir, f'solution_{i}.pickle'))
         else:
             print(f'Worker {seed} failed to solve MAPF problem {i+1}')
@@ -150,12 +76,12 @@ def save_environment(env: RegionalEnvironment, dir: os.path):
     with open(os.path.join(dir, 'env.pickle'), 'wb') as f:
         pickle.dump(env_data, f)
 
-def save_problem(partial_paths: dict, 
+def save_problem(start_vertex: dict, 
                     region_paths: dict, 
                     final_goals: dict, 
                     file_path: os.path):
     problem_data = {
-        'partial_paths' : partial_paths,
+        'start_pos' : {id : start_vertex[id].pos for id in start_vertex},
         'region_paths' : region_paths,
         'final_goals' : final_goals
     }
@@ -195,21 +121,20 @@ def save_solution(solution: MAPFSolution, file_path: os.path):
 if __name__ == "__main__":
 
     N_cpus = 8
-    N_cpu_hrs = 1
-    # N_problems = N_cpu_hrs*N_cpus*60 # number of problems per worker process
-    N_problems = N_cpu_hrs*60
+    N_problems = 45
     N_problems_total = N_cpus*N_problems
 
     now = time.time()
     datestring = date.fromtimestamp(now)
     dir = str(f'{datestring}_rcbs_output')
 
-    nrows = ncols = path_cutoff = 8
-    colh = colw = 8
+    nrows = ncols = 5
+    path_cutoff = 10
+    colh = colw = 4
     dy = dx = 2
-    N_agents = 100
+    N_agents = 120
     omega = 1.05
-    seeds = list(range(N_cpus))
+    seeds = list(s for s in np.random.randint(0,int(1e5), size=N_cpus))
     with Pool(N_cpus) as p:
         args = (N_problems, 
                 dir, 

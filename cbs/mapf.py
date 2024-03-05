@@ -157,8 +157,8 @@ class PathEdge(Constraint):
         if self.t == other.t:
             if self.p1==other.p1 and self.p2==other.p2:
                 return True
-            if self.p1==other.p2 and self.p2==other.p1:
-                return True
+            # if self.p1==other.p2 and self.p2==other.p1:
+            #     return True
         return False
     
     def __hash__(self):
