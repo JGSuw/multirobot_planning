@@ -7,13 +7,11 @@ class CBSNode:
     def __init__(self, 
                  paths: dict,
                  goals: dict, 
-                #  action_generator: ActionGenerator,
                  cost_offset = 0):
         self.cost_offset = cost_offset
         self.goals = goals
         self.paths = paths
         self.agent_constraint_count = 0
-        # self.action_generator= action_generator 
         self.agent_constraints = {}
         self.path_constraints = {}
         self.cost = 0.
@@ -169,6 +167,10 @@ def detect_conflicts(paths: dict):
     conflicts = []
     for id in paths:
         path = paths[id]
+        v = path[0]
+        if v in vertexes:
+            other = vertexes[v]
+            conflicts.apend((*other, None, None))
         for i in range(len(path)-1):
             u = path[i]
             v = path[i+1]
