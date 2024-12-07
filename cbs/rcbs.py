@@ -144,105 +144,54 @@ class BoundaryGoal(Goal):
     def satisfied(self, p: tuple):
         return self.set_goal.satisfied(p)
     
-def focal_astar(
+def astar(
     action_gen: ActionGenerator.actions,
-    V: dict,
-    E: dict,
     v: PathVertex,
     goal: Goal,
-    constraints: dict,
-    omega: float):
+    constraints: dict):
 
-    # queues
-    OPEN = []
-    open_finder = {}
-    FOCAL = []
-    focal_finder = {}
-
-    # dictionary to track predecessors of each vertex
-    predecessors = {}
 
     # admissible heuristic for goals
     h = lambda loc: goal.heuristic(loc)
 
     # scores
-    d = {} # d[v] = # of conflicts from start to v
     g = {} # g[v] = distance from start to v
     f = {} # f[v] = g[v] + h(v)
+
+    # priority queue
+    OPEN = []
+    open_finder = {}
+
+    # dictionary to track predecessors of each vertex
+    predecessors = {}
 
     if v in constraints:
         print('A* infeasibility')
         return None, np.inf
     
     predecessors[v] = None
-    d_score = 0
-    if v in V:
-        d_score += 1
     g_score = 1
     f_score = g_score + h(v.pos)
-    d[v] = d_score
     g[v] = g_score
     f[v] = f_score 
 
     entry = [f_score, v]
     open_finder[v] = entry
-    f_best = f_score
     heappush(OPEN, entry)
 
-    entry = [d_score, f_score, v]
-    focal_finder[v] = entry
-    heappush(FOCAL, entry)
-
-    while len(FOCAL) > 0 or len(OPEN) > 0:
-    # while len(FOCAL) > 0:
-        # check to see if f_best has changed, if so, reform FOCAL 
-        if OPEN[0][0] != f_best:
-            f_best = OPEN[0][0]
-            OLD_FOCAL = FOCAL
-            FOCAL = []
-            while len(OLD_FOCAL) > 0:
-                entry = heappop(OLD_FOCAL)
-                v = entry[-1]
-                focal_finder.pop(v)
-                if f_score <= omega*f_best:
-                    focal_finder[v] = entry
-                    heappush(FOCAL, [d_score, f_score, v])
-        
-        if len(FOCAL) > 0:
-            entry = FOCAL[0]
-            d_score = entry[0]
-            f_score = entry[1]
-            v = entry[2]
-            if goal.satisfied(v.pos): 
-                # reconstruct the path
-                vertexes = []
-                while predecessors[v] != None:
-                    vertexes.append(v)
-                    v = predecessors[v]
+    while len(OPEN) > 0:
+        f_score, v = heappop(OPEN)
+        open_finder.pop(v)
+        if goal.satisfied(v.pos): 
+            # reconstruct the path
+            vertexes = []
+            while predecessors[v] != None:
                 vertexes.append(v)
-                vertexes.reverse()
-                path = Path(vertexes)
-                return Path(vertexes), len(path), OPEN[0][0]
-            else:
-                heappop(FOCAL)
-                focal_finder.pop(v)
-        else:
-            entry = OPEN[0]
-            f_score = entry[0]
-            v = entry[1]
-            if goal.satisfied(v.pos): 
-                # reconstruct the path
-                vertexes = []
-                while predecessors[v] != None:
-                    vertexes.append(v)
-                    v = predecessors[v]
-                vertexes.append(v)
-                vertexes.reverse()
-                path = Path(vertexes)
-                return Path(vertexes), len(path), OPEN[0][0]
-            else:
-                heappop(OPEN)
-                open_finder.pop(v)
+                v = predecessors[v]
+            vertexes.append(v)
+            vertexes.reverse()
+            path = Path(vertexes)
+            return Path(vertexes), len(path)
 
         # get new nodes
         new_nodes = []
@@ -256,15 +205,8 @@ def focal_astar(
             if u in g:
                 if g[v] + 1 < g[u]:
                     predecessors[u] = v
-                    d_score = d[v]
                     g_score = g[v] + 1
                     f_score = g_score + h(u.pos)
-                    e = PathEdge(v.pos, u.pos, v.t)
-                    if v in V:
-                        d_score += 1
-                    if e in E or e.compliment() in E:
-                        d_score += 1
-                    d[u] = d_score
                     g[u] = g_score
                     f[u] = f_score
                     if u not in open_finder:
@@ -273,43 +215,20 @@ def focal_astar(
                         heappush(OPEN, open_entry)
                     else:
                         open_entry = open_finder[u]
-                        if f_score != open_entry[0]:
-                            open_entry[0] = f_score
-                            heapify(OPEN)
-                    if f_score <= OPEN[0][0]*omega:
-                        if u not in focal_finder:
-                            focal_entry = [d_score, f_score, u]
-                            focal_finder[u] = focal_entry
-                            heappush(FOCAL, focal_entry)
-                        else:
-                            focal_entry = focal_finder[u]
-                            if focal_entry[0] != d_score or focal_entry[1] != f_score:
-                                focal_entry[0] = d_score
-                                focal_entry[1] = f_score
-                                heapify(FOCAL)
+                        open_entry[0] = f_score
+                        heapify(OPEN)
             else:
                 predecessors[u] = v 
-                d_score = d[v]
                 g_score = g[v] + 1
                 f_score = g_score + h(u.pos)
-                e = PathEdge(v.pos, u.pos, v.t)
-                if v in V:
-                    d_score += 1
-                if e in E or e.compliment() in E:
-                    d_score += 1
-                d[u] = d_score
                 g[u] = g_score
                 f[u] = f_score
                 entry = [f_score, u]
                 open_finder[u] = entry
                 heappush(OPEN, entry)
-                if f_score <= OPEN[0][0]*omega:
-                    entry = [d_score, f_score, u]
-                    focal_finder[u] = entry
-                    heappush(FOCAL, entry)
 
-    # del queue
-    return None, np.inf, np.inf
+    print('A* infeasibility (empty open queue)')
+    return None, np.inf
 
 class CBSNode:
     def __init__(self,
@@ -318,179 +237,80 @@ class CBSNode:
     ):
         self.x = x              # key = id, value = PathVertex
         self.goals = goals      # key = id, value = Goal
-        self.constraints = {}   # key = id, value = hash table of constraints
-        self.l = {}             # key = id, value = path length lowerbound (int)
-        self.paths = {}         # key = id, value = Path
-        self.vertexes = {}      # key = id, value = dict of vertexes 
-        self.edges = {}         # key = is, value = dict of edges
+        self.constraints = dict((id, {}) for id in self.x)
+        self.paths = dict((id, Path([x[id]])) for id in self.x)
         self.conflicts = []
         self.conflict_count = 0
         self.cost = 0
-        self.lower_bound = 0
-    
-    def apply_constraint(self, id: int, c: Constraint):
-        if id in self.constraints:
-            self.constraints[id][c] = True
-        else:
-            self.constraints[id] = {c: True}
-
-    # def detect_conflicts(self):
-    #     vertexes = {}
-    #     edges = {}
-    #     conflicts = []
-    #     for id in self.paths:
-    #         path = self.paths[id]
-    #         start = path[0]
-    #         if start in vertexes:
-    #             other = vertexes[start]
-    #             if other[0] != id:
-    #                 conflicts.append([other])
-    #         else:
-    #             vertexes[start] = (id, start)
-    #         for i in range(len(path)-1):
-    #             u = path[i]
-    #             v = path[i+1]
-    #             e = PathEdge(u.pos, v.pos, u.t)
-    #             if v in vertexes:
-    #                 other = vertexes[v]
-    #                 if other[0] != id:
-    #                     if v != self.paths[other[0]][0]:
-    #                         conflicts.append([(id,v), other])
-    #                     else:
-    #                         conflicts.append([(id,v)])
-    #             else:
-    #                 vertexes[v] = (id,e)
-    #             if e.compliment() in edges:
-    #                 other = edges[e.compliment()]
-    #                 if other[0] != id:
-    #                     conflicts.append([(id,e), other])
-    #             else:
-    #                 edges[e] = (id,e)
-    #     self.conflicts = conflicts
-    #     self.conflict_count = len(conflicts)
 
     def detect_conflicts(self):
         vertexes = {}
         edges = {}
-        # final_pos = dict((paths[id][-1].pos, id) for id in paths)
-        # final_t = dict((id, paths[id][-1].t) for id in paths)
         conflicts = []
         for id in self.paths:
             path = self.paths[id]
             v = path[0]
-            if v in vertexes:
-                other = vertexes[v]
-                conflicts.append([other])
+            # if v in vertexes:
+                # other = vertexes[v]
+                # conflicts.append([other])
             for i in range(len(path)-1):
                 u = path[i]
                 v = path[i+1]
                 e = PathEdge(u.pos, v.pos, u.t)
-
                 if v in vertexes:
                     other = vertexes[v]
-                    # if other[0] != id:
-                    if self.x[other[0]] == v:
-                        pass
-                    else:
-                        conflicts.append([(id,e),other])
+                    conflicts.append([(id,e),other])
                 else:
                     vertexes[v] = (id,e)
-                # if v.pos in final_pos:
-                #     other_id = final_pos[v.pos]
-                #     if id != other_id:
-                #         if v.t >= final_t[other_id]:
-                #             conflicts.append((id, e, None, None))
-
                 if e.compliment() in edges:
                     other = edges[e.compliment()]
-                    if other[0] != id:
-                        conflicts.append([(id,e),other])
+                    conflicts.append([(id,e),other])
                 else:
                     edges[e] = (id,e)
         self.conflicts = conflicts
         self.conflict_count = len(conflicts)
         return conflicts
     
-    def compute_cost(self):
-        self.cost = sum(len(self.paths[id]) for id in self.paths)
-        self.lower_bound = sum(self.l[id] for id in self.l)
-    
     def branch(self, id: int, c: Constraint):
-        node = copy.deepcopy(self)
-        node.apply_constraint(id, c)
-        node.paths = copy.deepcopy(self.paths)
-        node.l = copy.deepcopy(self.l)
-        return node
+        new_node = copy.deepcopy(self)
+        new_node.constraints[id][c] = True
+        return new_node
 
     def __lt__(self, other):
         if type(other) != CBSNode:
             raise ValueError(f'Cannot compare CBSNode to other of type {type(other)}')
         return self.cost < other.cost
     
-def update_paths(node: CBSNode, ids: list, a: ActionGenerator.actions, omega: float):
-    # delete vertex/edge sets for any agents to be updated
-    for id in ids:
-        if id in node.vertexes: del node.vertexes[id]
-        if id in node.edges: del node.edges[id]
-    # create vertex and edge sets to check during A* for conflicts - 
-    # this generates a heuristic for sorting A* nodes in the FOCAL heap
-    V = {v: True for id in node.vertexes for v in node.vertexes[id]}
-    E = {e: True for id in node.edges for e in node.edges[id]}
-    for id in ids:
+def update_paths(node: CBSNode, a: ActionGenerator.actions):
+    for id, start in node.x.items():
         goal = node.goals[id]
-        if id in node.constraints:
-            c = node.constraints[id]
-        else:
-            c = {} # empty hash table of constraints
-        path, cost, lb = focal_astar(a, V, E, node.x[id], goal, c, omega)
-        node.vertexes[id] = {}
-        node.edges[id] = {}
+        constraints = node.constraints[id]
+        path, cost = astar(a, start, goal, constraints)
         if path is not None:
             node.paths[id] = path
-            node.l[id] = lb
-            for i in range(len(path)-1):
-                u = path[i]
-                v = path[i+1]
-                e = PathEdge(u.pos, v.pos, u.t)
-                node.vertexes[id][v] = True
-                node.edges[id][e] = True
+            node.cost = cost
         else:
             node.paths[id] = Path([node.x[id]])
-            node.l[id] = np.inf
             node.cost = np.inf
             break # can skip other agents because node contains infeasible A* problem
 
 def conflict_based_search(
         root: CBSNode, 
         a: ActionGenerator.actions, 
-        omega: float, 
         maxtime=60.,
         verbose=False):
     clock_start = time.time()
-    ids = [id for id in root.goals]
-    update_paths(root, ids, a, omega)
+    update_paths(root, a)
     root.detect_conflicts()
-    root.compute_cost()
-    O = [[root.lower_bound, root]]
-    F = [[root.conflict_count, root]]
-    while len(O) > 0 or len(F) > 0:
-        node = None
-        while len(F) > 0:
-            entry = heappop(F)
-            if entry[1].cost <= omega*O[0][0]:
-                node = entry[1]
-                if verbose:
-                    print('CBS popped from F')
-                break
-        if node is None:
-            lower_bound, node = heappop(O)
-            if verbose:
-                print('CBS popped from O')
+    O = [root]
+    node = None
+    while len(O) > 0:
+        node = heappop(O)
         if time.time() - clock_start > maxtime:
             if verbose:
                 print('CBS timeout')
             node.cost = np.inf
-            return node, np.inf 
+            return node, node.cost
         if node.conflict_count > 0:
             if verbose:
                 print(f'Current conflict count {node.conflict_count}')
@@ -499,21 +319,14 @@ def conflict_based_search(
                 if verbose:
                     print(f'Applying constraint {c} to {id}')
                 new_node = node.branch(id, c)
-                update_paths(new_node, [id], a, omega)
+                update_paths(new_node, a)
                 new_node.detect_conflicts()
-                new_node.compute_cost()
-                if new_node.lower_bound < np.inf:
-                    heappush(O, [new_node.lower_bound, new_node])
-                    if new_node.cost <= omega * O[0][0]:
-                        heappush(F, [new_node.conflict_count, new_node])
+                if new_node.cost < np.inf:
+                    heappush(O, new_node)
         else:
             if verbose:
                 print('CBS solution found')
-            if len(O) > 0:
-                lb = O[0][0]
-            else:
-                lb = node.lower_bound
-            return node, lb
+            return node, node.cost
     if verbose:
         print('Infeasible CBS problem')
     node.cost = np.inf
@@ -530,259 +343,276 @@ class RCBSNode:
         self.conflict_count = 0
         self.cost = 0
         self.goal_cost = 0
-        self.lb = {}
-        self.lower_bound = 0
         self.cbs_nodes = {}
-        self.constraints = {}
-        
-    def detect_conflicts(self):
-        conflict_count = 0
-        conflicts = []
-        vertexes = {}
-        edges = {}
-        for r in self.cbs_nodes:
-            N = self.cbs_nodes[r]
-            for id in N.paths:
-                path = N.paths[id]
-                trip_idx = self.trip_idx[id]
-                last_region = self.region_paths[trip_idx-1] if trip_idx > 0 else None
-                if last_region is not None:
-                    last_path = self.partial_paths[last_region][id]
-                    u = last_path[-2]
-                    v = last_path[-1]
-                    e = PathEdge(u.pos,v.pos,u.t)
-                    if v in vertexes:
-                        other = vertexes[v]
-                        if other[1] != id:
-                            conflicts.append([(last_region, id, e), other])
-                # if path[0] in vertexes:
-                #     trip_idx = self.trip_idx[id]
-                #     region_path = self.region_paths[id]
-                #     last_region = region_path[trip_idx-1]
-                #     last_path = self.partial_paths[last_region][id]
-                #     e = PathEdge(last_path[-2],path[0],last_path[-2].t)
-                #     other = vertexes[v]
-                #     if other[1] != id:
-                #         print("OH SHIT")
-                #         conflicts.append([other])
-                # else:
-                #     vertexes[path[0]] = () # wtf should I even put here?
-                    # what the fuck can I do in this case?
-                    # and why the fuck wasn't it caught?
-                for i in range(len(path)-1):
-                    u = path[i]
-                    v = path[i+1]
-                    e = PathEdge(u.pos, v.pos, u.t)
-                    if v in vertexes:
-                        other = vertexes[v]
-                        if other[1] != id:
-                            conflicts.append([(r,id,e), other])
-                            conflict_count += 1
-                    else:
-                        vertexes[v] = (r,id,e)
-                    if e.compliment() in edges:
-                        other = edges[e.compliment()]
-                        if other[1] != id:
-                            conflicts.append([(r,id,e), other])
-                            conflict_count += 1
-                    else:
-                        edges[e] = (r,id,e)
-        self.region_conflicts = conflicts
-        self.conflict_count = conflict_count
+        self.agent_constraints = dict((id, {}) for id in x)
+        self.path_constraints = {}
 
     def compute_cost(self):
         self.goal_cost = sum(-self.trip_idx[id] for id in self.trip_idx)
         self.cost = 0
-        self.lower_bound = 0
 
         for id in self.region_paths:
             region_path = self.region_paths[id]
             trip_idx = self.trip_idx[id]
             for r in region_path[0:trip_idx]:
                 path_cost = len(self.partial_paths[r][id])
-                self.lower_bound += path_cost
                 self.cost += path_cost
-        for r in self.cbs_nodes:
-            N = self.cbs_nodes[r]
-            self.cost += N.cost
-        for r in self.lb:
-            self.lower_bound += self.lb[r]
+        for r, cbs_node in self.cbs_nodes.items():
+            self.cost += cbs_node.cost
 
     def make_solution(self):
         paths = {}
         for id in self.region_paths:
             region_path = self.region_paths[id]
             for r in region_path:
-                path = copy.copy(self.partial_paths[r][id])
+                path = copy.deepcopy(self.partial_paths[r][id])
                 if id not in paths:
                     paths[id] = path
                 else:
                     paths[id] += path
         return MAPFSolution(paths)
-
+    
     def __lt__(self, other):
-        pass
+        if self.goal_cost < other.goal_cost:
+            return True
+        elif self.goal_cost > other.goal_cost:
+            return False
+        else:
+            return self.cost <= other.cost
 
-def init_rcbs(env: RegionalEnvironment, x: dict, final_goals: dict, region_paths):
-    root = RCBSNode(x, final_goals, region_paths)
-    cbs_nodes = {r: CBSNode({},{}) for r in env.region_graph.nodes}
-    root.cbs_nodes = cbs_nodes
-    for r in cbs_nodes:
-        N = cbs_nodes[r]
-        renv = env.region_graph.nodes[r]['env']
-        agents = [id for id in x if renv.contains_node(x[id].pos)]
-        for id in agents:
-            N.x[id] = x[id]
-            region_path = region_paths[id]
-            if len(region_path) == 1:
-                N.goals[id] = LocationGoal(final_goals[id])
-            else:
-                r2 = region_path[1]
-                N.goals[id] = BoundaryGoal(env, r, r2, final_goals[id])
-    return root
+def detect_boundary_conflicts(env: RegionalEnvironment, node: RCBSNode):
+    """
+    New conflict detection logic...
 
-def update_region(M: RCBSNode, env: RegionalEnvironment, r:tuple, omega: float, cbs_maxtime: float):
-    if r in M.constraints:
-        constraints = M.constraints[r]
-    else:
-        constraints = M.constraints[r] = {}
-    action_gen = RegionActionGenerator(env.gridworld, 
-                                       env.region_graph.nodes[r]['env'], 
-                                       constraints=constraints)
-    N, lb = conflict_based_search(M.cbs_nodes[r], action_gen.actions, omega, maxtime=cbs_maxtime)
-    M.lb[r] = lb
-    M.cbs_nodes[r] = N
-    paths = copy.deepcopy(N.paths)
-    if r in M.partial_paths:
-        M.partial_paths[r].update(paths)
-    else:
-        M.partial_paths[r] = paths
-
-def branch_rcbs(node: RCBSNode, 
-                r: tuple, 
-                id: int, 
-                c: Constraint):
-    # allocate new nodes
-    M = copy.deepcopy(node)
-    N = M.cbs_nodes[r]
-    N.apply_constraint(id, c)
-    return M
-
-def advance_agents(node: RCBSNode, env: RegionalEnvironment):
-    M = copy.deepcopy(node)
-    # advance the agent trip index
-    for id in M.trip_idx:
-        region_path = M.region_paths[id]
-        M.trip_idx[id] = min(M.trip_idx[id]+1,len(region_path)-1)
-
-    # create new CBS nodes
-    M.cbs_nodes = {r : CBSNode({},{}) for r in env.region_graph.nodes}
-    M.lb = {}
-    for id in M.trip_idx:
-        trip_idx = M.trip_idx[id]
-        region_path = M.region_paths[id]
-        # if trip_idx == len(region_path):
-            # continue # this agent has finished all trips, so skip
-                     # if the agent has completed all trips, then shouldn't we apply it's last path
-                     # as a constraint, or something?
-
-            # this might be the crux of the problem right here.
-            # agents in their final regions probably need to be maintained there!
-        # apply path constraints to the last previous region
-        # if trip_idx < len(region_path)-1:
-        if trip_idx > 0:
-            r_old = region_path[trip_idx-1]
-            r_current = region_path[trip_idx]
-            path = M.partial_paths[r_old][id]
-            # M.constraints[r_old][path[0]] = True
+    For each agent, examine their path, marking all locations they occupy or edges they traverse
+    that are part of a region boundary.
+    """
+    vertexes = {}
+    edges = {}
+    node.region_conflicts = []
+    node.conflict_count = 0
+    for id, trip_idx in node.trip_idx.items():
+        region_path = node.region_paths[id]
+        # for each trip,
+        for trip in range(trip_idx+1):
+            # get the region and path
+            region = region_path[trip]
+            path = node.partial_paths[region][id]
+            # get the region boundary from the environment
+            boundary = env.region_graph.nodes[region]['env'].boundary
+            # iterate over the path and check vertexes and edges whenever
+            # the agent is occupying a boundary node
             for i in range(len(path)-1):
                 u = path[i]
                 v = path[i+1]
+                e = PathEdge(u.pos,v.pos,u.t)
+                if u.pos in boundary or v.pos in boundary:
+                    if v in vertexes:
+                        other = vertexes[v]
+                        node.region_conflicts.append([(id,region,e), other])
+                        node.conflict_count += 1
+                    else:
+                        vertexes[v] = (id,region,e)
+                    if e.compliment() in edges:
+                        other = edges[e.compliment()]
+                        node.region_conflicts.append([(id,region,e), other])
+                        node.conflict_count += 1
+                    else:
+                        edges[e] = (id,region,e)
+
+def init_rcbs(env: RegionalEnvironment, x: dict, final_goals: dict, region_paths):
+    root = RCBSNode(x, final_goals, region_paths)
+    cbs_nodes = {}
+    for r in env.region_graph.nodes:
+        # N = cbs_nodes[r]
+        renv = env.region_graph.nodes[r]['env']
+        agents = [id for id in x if renv.contains_node(x[id].pos)]
+        # start positions and goals
+        cbs_node_x = {}
+        cbs_node_goals = {}
+        for id in agents:
+            cbs_node_x[id] = x[id]
+            region_path = region_paths[id]
+            if len(region_path) == 1:
+                cbs_node_goals[id] = LocationGoal(final_goals[id])
+            else:
+                r2 = region_path[1]
+                cbs_node_goals[id] = BoundaryGoal(env, r, r2, final_goals[id])
+        cbs_nodes[r] = CBSNode(cbs_node_x, cbs_node_goals)
+    root.cbs_nodes = cbs_nodes
+    return root
+
+def update_region(env: RegionalEnvironment, node: RCBSNode, r: tuple, cbs_maxtime: float):
+    action_gen = RegionActionGenerator(env.gridworld, 
+                                       env.region_graph.nodes[r]['env'], 
+                                       constraints=node.path_constraints)
+    cbs_node, cost = conflict_based_search(node.cbs_nodes[r], action_gen.actions, maxtime=cbs_maxtime)
+    node.cbs_nodes[r] = cbs_node
+    paths = copy.deepcopy(cbs_node.paths)
+    try:
+        node.partial_paths[r].update(paths)
+    except KeyError:
+        node.partial_paths[r] = paths
+
+def branch_rcbs(env: RegionalEnvironment,
+                node: RCBSNode, 
+                id: int, 
+                r: tuple, 
+                c: Constraint):
+    # allocate new node
+    new_node = copy.deepcopy(node)
+    # compare current region of agent to r
+    region_path = node.region_paths[id]
+    trip_idx = node.trip_idx[id]
+    current_r = node.region_paths[id][trip_idx]
+
+    # in this case, we have to revert the agent to an earlier trip index
+    if current_r != r:
+        print('agent must revert!')
+        # 1) apply constraint to agent in RCBS node
+        new_node.agent_constraints[id][c] = True
+
+        # 2) re-initialize CBS node of current region to exclude the agent
+        old_cbs_node = new_node.cbs_nodes[current_r]
+        del old_cbs_node.x[id]
+        del old_cbs_node.goals[id]
+        new_node.cbs_nodes[current_r] = CBSNode(old_cbs_node.x, old_cbs_node.goals)
+        new_cbs_node = CBSNode(old_cbs_node.x, old_cbs_node.goals)
+        for id in new_cbs_node.x:
+            new_cbs_node.constraints[id] = copy.deepcopy(new_node.agent_constraints[id])
+        new_node.cbs_nodes[current_r] = new_node
+
+        # 3) re-initialize CBS node of the last region to include the agent
+        old_cbs_node = new_node.cbs_nodes[r]
+        last_path = new_node.partial_paths[r][id]
+        old_cbs_node.x[id] = last_path[0]
+        old_cbs_node.goals[id] = BoundaryGoal(env, r, current_r, new_node.final_goals[id])
+        new_cbs_node = CBSNode(old_cbs_node.x, old_cbs_node.goals)
+        for id in new_cbs_node.x:
+            new_cbs_node.constraints[id] = copy.deepcopy(new_node.agent_constraints)
+        new_node.cbs_nodes[r] = new_node
+
+        # 4) get the new trip idx
+        new_trip_idx = next(i for i in range(len(region_path)) if r == region_path[i])
+        new_node.trip_idx[id] = new_trip_idx
+
+        # 5) Remove path constraints imposed by the agent's partial paths from regions inbetween
+        for idx in range(new_trip_idx, trip_idx):
+            old_region = region_path[idx]
+            old_path = new_node.partial_paths[old_region][id]
+            for i in range(len(old_path)-1):
+                u = last_path[i]
+                v = last_path[i+1]
+                e = PathEdge(u.pos,v.pos,u.t)
+                del new_node.path_constraints[v]
+                del new_node.path_constraints[e]
+            # old_path is no longer needed in the partial_paths of old_region
+            # del new_node.partial_paths[old_region][id]
+    else:
+        # apply constraint on agent to current region
+        new_node.agent_constraints[id][c] = True
+        new_node.cbs_nodes[current_r].constraints[id][c] = True
+
+    return new_node
+
+def advance_agents(env: RegionalEnvironment, node: RCBSNode):
+    new_node = copy.deepcopy(node)
+
+    # loop over agents to apply path constraints and update trip_idx
+    for id, trip_idx in new_node.trip_idx.items():
+        region_path = new_node.region_paths[id]
+        # applying path constraints from agent's last partial path
+        if trip_idx < len(region_path)-1:
+            last_r = region_path[trip_idx]
+            last_path = new_node.partial_paths[last_r][id]
+            for i in range(len(last_path)-1):
+                u = last_path[i]
+                v = last_path[i+1]
                 e = PathEdge(u.pos, v.pos, u.t)
-                M.constraints[r_old][v] = True
-                M.constraints[r_old][e] = True
-                M.constraints[r_old][e.compliment()] = True
-            start = path[-1]
-        else:
-            r_current = region_path[trip_idx]
-            path = M.partial_paths[r_current][id]
-            start = path[0]
-        # if trip_idx == len(region_path):
-            # continue # skip the following 
-            # set the starting position in r2
-        r_current = region_path[trip_idx]
-        M.cbs_nodes[r_current].x[id] = start
-        # set the goal in r2
-        if r_current == region_path[-1]:
-            M.cbs_nodes[r_current].goals[id] = LocationGoal(M.final_goals[id])
-        else:
-            r_next = region_path[trip_idx+1]
-            M.cbs_nodes[r_current].goals[id] = BoundaryGoal(env, r_current, r_next, M.final_goals[id])
-        # else: # agents that are in their final region stay in the CBS subproblem
-        #     r = region_path[id][-1]
-        #     M.cbs_nodes[r2].x[id] = M.partial_paths[r][id][0]
-        #     M.cbs_nodes[r].goals[id] = LocationGoal(M.final_goals[id])
-    return M
+                new_node.path_constraints[v] = True
+                new_node.path_constraints[e] = True
+        # incrementing the agent's trip index
+        new_node.trip_idx[id] = min(trip_idx+1, len(region_path)-1)
+
+    # loop over regions, initializing new cbs nodes
+    new_cbs_nodes = {}
+    for region in new_node.cbs_nodes:
+        x = {}
+        goals = {}
+        agent_constraints = {}
+        for id, trip_idx in new_node.trip_idx.items():
+            region_path = new_node.region_paths[id]
+            last_r = region_path[max(trip_idx-1,0)]
+            current_r = region_path[trip_idx]
+            if current_r == region:
+                # apply the start position of the agent in this region to x
+                if last_r != current_r:
+                    x[id] = new_node.partial_paths[last_r][id][-1]
+                else:
+                    x[id] = new_node.x[id]
+                # determine the agent's goal (boundary goal if intermediate trip, location goal if final trip)
+                if trip_idx < len(region_path)-1:
+                    next_r = region_path[trip_idx+1]
+                    goals[id] = BoundaryGoal(env, current_r, next_r, new_node.final_goals[id])
+                else:
+                    goals[id] = LocationGoal(new_node.final_goals[id])
+                agent_constraints[id] = copy.deepcopy(new_node.agent_constraints[id])
+        new_cbs_nodes[region] = CBSNode(x,goals)
+        new_cbs_nodes[region].constraints = agent_constraints
+    new_node.cbs_nodes = new_cbs_nodes
+    return new_node
 
 def regional_cbs(root: RCBSNode, env: RegionalEnvironment, omega: float, maxtime=60., cbs_maxtime=30., verbose=False):
     clock_start = time.time()
 
     for r in root.cbs_nodes:
-        update_region(root, env, r, omega, cbs_maxtime)
+        update_region(env, root, r, cbs_maxtime)
     root.compute_cost()
-    root.detect_conflicts()
+    detect_boundary_conflicts(env, root)
 
-    O = [[root.goal_cost, root.lower_bound, root]]
-    F = [[root.goal_cost, root.conflict_count, root]]
-    while len(O) > 0 or len(F) > 0:
+    O = [root]
+    node = None
+    while len(O) > 0:
 
         if time.time() - clock_start > maxtime:
             print('RCBS timeout')
             # return O, F # return the queue for inspection / completing partial solutions
-            return None
+            return None, node, O
 
-        M = None
-        while len(F) > 0:
-            goal_cost, conflict_count, M = heappop(F)
-            if M.cost <= omega * O[0][1]:
-                break
-            M = None
-        if M is None: 
-            gc, f, M = heappop(O)
+        node = heappop(O)
 
-        if M.conflict_count > 0:
-            conflict = M.region_conflicts[0]
-            for (r, id, c) in conflict:
+        if node.conflict_count > 0:
+            conflict = node.region_conflicts[0]
+            for (id, r, c) in conflict:
                 if verbose:
                     print(f'Branching at region {r} with constraint {c} applied to agent {id}')
-                new_node = branch_rcbs(M, r, id, c)
-                update_region(new_node, env, r, omega, cbs_maxtime)
+                new_node = branch_rcbs(env, node, id, r, c)
+                update_region(env, new_node, r, cbs_maxtime)
                 new_node.compute_cost()
-                new_node.detect_conflicts() 
-                if new_node.lower_bound < np.inf:
-                    heappush(O,[new_node.goal_cost, new_node.lower_bound, new_node])
-                    if new_node.cost <= omega * O[0][1]:
-                        heappush(F,[new_node.goal_cost, new_node.conflict_count, new_node])
+                detect_boundary_conflicts(env, new_node)
+                if new_node.cost < np.inf:
+                    heappush(O,new_node)
+                elif verbose:
+                    print('Discarding node due to infeasible subproblem')
         else:
-            if all(M.trip_idx[id] == len(M.region_paths[id])-1 for id in M.trip_idx):
+            if all(node.trip_idx[id] == len(node.region_paths[id])-1 for id in node.trip_idx):
                 if verbose:
                     print('RCBS successful')
-                return M
+                return node.make_solution(), node, O
             else:
                 if verbose:
-                    print(f'# of completed trips {-M.goal_cost}')
+                    print(f'# of completed trips {-node.goal_cost}')
                     print('advancing agents...')
-                new_node = advance_agents(M, env)
+                new_node = advance_agents(env, node)
                 for r in new_node.cbs_nodes:
-                    update_region(new_node, env, r, omega, cbs_maxtime)
-                
+                    update_region(env, new_node, r, cbs_maxtime)
                 new_node.compute_cost()
-                new_node.detect_conflicts()
-                if new_node.lower_bound < np.inf:
-                    heappush(O,[new_node.goal_cost, new_node.lower_bound, new_node])
-                    if new_node.cost <= omega * O[0][1]:
-                        heappush(F,[new_node.goal_cost, new_node.conflict_count, new_node])
-    return None
+                detect_boundary_conflicts(env, new_node)
+                if new_node.cost < np.inf:
+                    heappush(O,new_node)
+                elif verbose:
+                    print('Discarding node due to infeasible subproblem')
+    return None, node, O
                 
 def random_problem(N_agents: int, env: ColumnLatticeEnvironment, path_cutoff=10, rng=np.random.default_rng()):
     # assign start locations to agents
