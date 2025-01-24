@@ -5,34 +5,25 @@ import numpy as np
 import heapq
 
 class ECBSNode(cbs.CBSNode):
-    def __init__(self,
-                 paths: dict,
-                 goals: dict, 
-    ):
-        super().__init__(paths, goals)
+    def __init__(self, x: dict):
+        super().__init__(x)
         self.lower_bounds = {}
         self.lower_bound = 0
-        self.conflict_count = 0 
         self.occupied_vertexes = {}
         self.traversed_edges = {}
-        self.conflicts = []
 
     def compute_lower_bound(self):
         self.lower_bound = sum(self.lower_bounds[id] for id in self.lower_bounds)
     
     def compute_cost(self):
         self.cost = sum(len(self.paths[id]) for id in self.paths)
-
-    def detect_conflicts(self):
-        self.conflicts = cbs.detect_conflicts(self.paths)
-        self.conflict_count = len(self.conflicts)
-
+    
 def focal_astar(
-    action_gen: ActionGenerator.actions,
+    action_generator: ActionGenerator,
     occupied_vertexes: dict,
     traversed_edges: dict,
-    path: cbs.Path,
-    goal: cbs.Goal,
+    start: PathVertex,
+    goal: Goal,
     constraints: dict,
     omega: float):
 
@@ -53,15 +44,13 @@ def focal_astar(
     g = {} # g[v] = distance from start to v
     f = {} # f[v] = g[v] + h(v)
 
-    v = path[0]
+    v = start
     if v in constraints:
         print('A* infeasibility')
         return None, np.inf
     
     predecessors[v] = None
     d_score = 0
-    if v in occupied_vertexes:
-        d_score += 1
     g_score = 1
     f_score = g_score + h(v.pos)
     d[v] = d_score
@@ -86,11 +75,13 @@ def focal_astar(
             FOCAL = []
             while len(OLD_FOCAL) > 0:
                 entry = heapq.heappop(OLD_FOCAL)
-                v = entry[-1]
+                d_score = entry[0]
+                f_score = entry[1]
+                v = entry[2]
                 focal_finder.pop(v)
                 if f_score <= omega*f_best:
                     focal_finder[v] = entry
-                    heapq.heappush(FOCAL, [d_score, f_score, v])
+                    heapq.heappush(FOCAL, entry)
         
         if len(FOCAL) > 0:
             entry = FOCAL[0]
@@ -130,8 +121,8 @@ def focal_astar(
 
         # get new nodes
         new_nodes = []
-        for (u,e) in action_gen(v):
-            if u in constraints or e in constraints or e.compliment() in constraints:
+        for (u,e) in action_generator.actions(v):
+            if e in constraints:
                 continue # skip this vertex
             new_nodes.append(u)
 
@@ -145,9 +136,9 @@ def focal_astar(
                     f_score = g_score + h(u.pos)
                     e = PathEdge(v.pos, u.pos, v.t)
                     if u in occupied_vertexes:
-                        d_score += 1
+                        d_score += len(occupied_vertexes[u])
                     if e.compliment() in traversed_edges:
-                        d_score += 1
+                        d_score += len(traversed_edges[e.compliment()])
                     d[u] = d_score
                     g[u] = g_score
                     f[u] = f_score
@@ -178,9 +169,9 @@ def focal_astar(
                 f_score = g_score + h(u.pos)
                 e = PathEdge(v.pos, u.pos, v.t)
                 if u in occupied_vertexes:
-                    d_score += 1
+                    d_score += len(occupied_vertexes[u])
                 if e.compliment() in traversed_edges:
-                    d_score += 1
+                    d_score += len(traversed_edges[e.compliment()])
                 d[u] = d_score
                 g[u] = g_score
                 f[u] = f_score
@@ -195,20 +186,31 @@ def focal_astar(
     # del queue
     return None, np.inf, np.inf
 
-def low_level_solve(action_generator: ActionGenerator.actions, node: ECBSNode, agents, omega: float):
+def update_paths(node: ECBSNode, action_generators: dict, goals: dict, agents: list, omega: float):
     for id in agents:
+        # remove this agent's path from the occupied vertices and traversed edges
         path = node.paths[id]
-        goal = node.goals[id]
-        constraints = copy.deepcopy(node.path_constraints)
-        if id in node.agent_constraints:
-            constraints.update(node.agent_constraints[id])
+        for v in path.vertexes:
+            try:
+                ids = node.occupied_vertexes[v]
+                ids.remove(id)
+            except:
+                pass
+        for e in path.generate_edges():
+            try:
+                ids = node.traversed_edges[e]
+                ids.remove(id)
+            except:
+                pass
+
+        # run focal search to update the agents path
         new_path, cost, lb = focal_astar(
-            lambda v: action_generator.actions(v),
+            action_generators[id],
             node.occupied_vertexes,
             node.traversed_edges,
-            path,
-            goal,
-            constraints,
+            path[0],
+            goals[id],
+            node.constraints[id],
             omega
         )
         if new_path is None:
@@ -217,40 +219,27 @@ def low_level_solve(action_generator: ActionGenerator.actions, node: ECBSNode, a
             return
         node.paths[id] = new_path
         node.lower_bounds[id] = lb
-
-    # update dictionaries for tracking conflicts
-    occupied_vertexes = {}
-    traversed_edges = {}
-    for id in node.paths:
-        path = node.paths[id]
-        for i in range(len(path)-1):
-            u = path[i]
-            v = path[i+1]
-            e = PathEdge(u.pos, v.pos, u.t)
-            if u in occupied_vertexes:
-                occupied_vertexes[u].append(id)
-            else:
-                occupied_vertexes[u] = [id]
-            if e in traversed_edges:
-                traversed_edges[e] = id
-            if v in occupied_vertexes:
-                occupied_vertexes[v].append(id)
-            else:
-                occupied_vertexes[v] = [id]
-    node.occupied_vertexes = occupied_vertexes
-    node.traversed_edges = traversed_edges
+        # update occupied_vertexes and occupied_edges with new_path
+        for v in new_path.vertexes:
+            try:
+                node.occupied_vertexes[v].append(id)
+            except:
+                node.occupied_vertexes[v] = [id]
+        for e in new_path.generate_edges():
+            try:
+                node.traversed_edges[e].append(id)
+            except:
+                node.traversed_edges[e] = [id]
     node.compute_lower_bound()
     node.compute_cost()
-    node.detect_conflicts()
             
-def enhanced_cbs(action_generator: ActionGenerator.actions, node: ECBSNode, omega: float, maxtime=30., verbose=False):
+def enhanced_cbs(root: ECBSNode, action_generators: dict, goals: dict, omega: float, maxtime=30., verbose=False):
     clock_start = time.time()
-    OPEN = [[node.lower_bound, node]]
-    # FOCAL = [[node.conflict_count, node]]
-    FOCAL = [[node.conflict_count, node]]
-    best_lb = node.lower_bound
+    root.detect_conflicts()
+    OPEN = [[root.lower_bound, root]]
+    FOCAL = [[len(root.conflicts), root]]
+    best_lb = root.lower_bound
     while len(FOCAL) > 0 or len(OPEN) > 0:
-    # while len(FOCAL) > 0:
         if OPEN[0][0] != best_lb:
             best_lb = OPEN[0][0]
             if verbose:
@@ -260,7 +249,7 @@ def enhanced_cbs(action_generator: ActionGenerator.actions, node: ECBSNode, omeg
             for i in range(len(OLD_FOCAL)):
                 conflict_count, node = heapq.heappop(OLD_FOCAL)
                 if node.cost <= omega*OPEN[0][0]:
-                    heapq.heappush(FOCAL, [node.conflict_count, node])
+                    heapq.heappush(FOCAL, [conflict_count, node])
 
         if len(FOCAL) > 0:
             if verbose:
@@ -270,54 +259,38 @@ def enhanced_cbs(action_generator: ActionGenerator.actions, node: ECBSNode, omeg
             if verbose:
                 print('Retrieving node from OPEN')
             lower_bound, node = heapq.heappop(OPEN)
-        if node.conflict_count > 0:
-            (id1, c1, id2, c2) = node.conflicts[0]
-            if verbose:
-                print(f'Conflict between {id1} and {id2} with constraints {c1}, {c2}')
-            ids = [id for id in (id1, id2) if id is not None]
-            constraints = [c for c in (c1,c2) if c is not None]
-            if len(ids) == 2 :
+            conflict_count = len(node.conflicts)
+        if conflict_count > 0:
+            conflicts = node.conflicts[0]
+            for i,(id, c) in enumerate(conflicts):
                 if verbose:
-                    print('branching')
-                new_node = copy.deepcopy(node)
-                id = ids[1]
-                c = constraints[1]
-                new_node.apply_agent_constraint(id, c)
-                low_level_solve(action_generator, new_node, [id], omega)
+                    print(f'Applying constraint {c} to {id}')
+                if i == 0 and len(conflicts) > 1:
+                    new_node = node.branch(id, c, copy_node=True)
+                else:
+                    new_node = node.branch(id, c, copy_node=False)
+                update_paths(new_node, action_generators, goals, [id], omega)
+                new_node.detect_conflicts()
                 if new_node.cost < np.inf:
                     heapq.heappush(OPEN, [new_node.lower_bound, new_node])
                     if new_node.cost <= omega*OPEN[0][0]:
                         if verbose:
                             print(f'inserting new node into FOCAL with cost {new_node.cost}')
-                        heapq.heappush(FOCAL, [new_node.conflict_count, new_node])
+                        heapq.heappush(FOCAL, [len(new_node.conflicts), new_node])
                 else:
                     if verbose:
                         print('abandoning node')
                     del new_node
-            id = ids[0]
-            c = constraints[0]
-            node.apply_agent_constraint(id, c)
-            low_level_solve(action_generator, node,[id], omega)
-            if node.cost < np.inf:
-                heapq.heappush(OPEN, [node.lower_bound, node])
-                if node.cost <= omega*OPEN[0][0]:
-                    if verbose:
-                        print(f'inserting new node into FOCAL with cost {node.cost}')
-                    heapq.heappush(FOCAL, [node.conflict_count, node])
-            else:
-                if verbose:
-                    print('abandoning node')
-                del node
         else:
             # we are done
             # return both the current node and the lower bound on the solution value
-            return node, OPEN[0][0]
+            return node, OPEN, FOCAL
         
         if time.time()-clock_start > maxtime:
             print('ECBS timeout')
-            return None
+            return None, OPEN, FOCAL
         
     if verbose:
         print('infeasible problem')
-    return None
+    return None, OPEN, FOCAL
 

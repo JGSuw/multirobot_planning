@@ -99,6 +99,31 @@ def draw_environment(ax, env: Environment, agent_pos: dict, goals: dict, arrows=
             ax.arrow(start_x, start_y, dx, dy, head_width = 0.2, head_length = 0.2, alpha=.5)
     return image
 
+class MapFile:
+    def __init__(self, path: str):
+        # open file and parse the data
+        with open(path, 'r') as f:
+            typestring = f.readline()
+            self.type = typestring.split(' ')[1]
+            heightstring = f.readline()
+            self.height = int(heightstring.split(' ')[1][:-1])
+            widthstring = f.readline()
+            self.width = int(widthstring.split(' ')[1][:-1])
+            self.obstacles = []
+            for i in range(self.height):
+                line = f.readline()[:-1] # drop the newline character
+                if line == '':
+                    raise IndexError(f'Invalid MAP file has less than {self.height} rows.')
+                for j in range(self.width):
+                    try:
+                        if line[j] == '@':
+                            self.obstacles.append((i,j))
+                    except IndexError:
+                        raise IndexError(f'Invaled MAP file has than {self.width} columns at  row {i+1}.')
+                    
+    def make_gridworld(self):
+        return GridWorld((self.height, self.width), self.obstacles)
+
 class Constraint:
     def __init__(self):
         raise NotImplementedError()
@@ -174,6 +199,15 @@ class Path:
 
     def insert(self, vertex):
         self.vertexes.append(copy.deepcopy(vertex))
+
+    def generate_edges(self):
+        u = self.vertexes[0]
+        for i in range(1,len(self.vertexes)):
+            v = self.vertexes[i]
+            e = PathEdge(u.pos,v.pos,u.t)
+            yield e
+            u = v
+
 
     def __str__(self):
         return ', '.join([f'({v})' for v in self.vertexes])
@@ -262,8 +296,9 @@ class ActionGenerator:
         for u in vertexes:
             edge = PathEdge(v.pos, u.pos, v.t)
             if edge not in self.constraints:
-                if u not in self.constraints:
-                    yield (u, edge)
+                if edge.compliment() not in self.constraints:
+                    if u not in self.constraints:
+                        yield (u, edge)
 
     def apply_constraint(self, constraint):
         self.constraints[constraint]= True
@@ -305,6 +340,29 @@ class MAPFSolution:
     
     def sum_of_path_lengths(self):
         return sum(self.path_lengths())
+        # CBS subproblem failed to sol
+
+    def verify(self):
+        agents = list(self.paths.keys())
+        violations = [] 
+        for i in range(len(agents)):
+            for j in range(i + 1, len(agents)):
+                path1 = self.paths[agents[i]]
+                path2 = self.paths[agents[j]]
+                for t in range(min(len(path1), len(path2))):
+                    if path1[t].pos == path2[t].pos:
+                        if t < min(len(path1)-1,len(path2)-1):
+                            print(f"Vertex collision between agents {agents[i]} and {agents[j]}")
+                            print(f"Time: {t}")
+                            print(f"Position: {path1[t].pos}")
+                            violations.append({'type':'vertex','agents':(agents[i],agents[j]),'pos': path1[t].pos, 'time': t})
+                    if t < min(len(path1)-1, len(path2)-1):
+                        if (path1[t].pos == path2[t+1].pos and 
+                            path1[t+1].pos == path2[t].pos):
+                            print(f"Edge collision between agents {agents[i]} and {agents[j]}")
+                            print(f"Time: {t}-{t+1}")
+                            violations.append({'type':'edge','agents':(agents[i],agents[j]),'edge': (path1[t].pos,path2[t].pos), 'time': t})
+        return violations
     
 class MAPFAnimation:
     def __init__(self, env: Environment, solution: MAPFSolution):
