@@ -57,7 +57,6 @@ class GridWorld(Environment):
             mat[*o] = GridWorld.OBSTACLE
         return mat
 
-# draw the state of the provided environment
 def draw_environment(ax, env: Environment, agent_pos: dict, goals: dict, arrows=True, animated=False, grid=False):
     tab20b = colormaps.get_cmap('tab20b')
     colors = tab20b(list(range(20)))
@@ -146,7 +145,6 @@ class Location(Constraint):
     def __eq__(self, other):
         return self.pos == other.pos
 
-# Represents a vertex in an agent trajectory
 class PathVertex(Constraint):
     def __init__(self, pos: tuple, time: int):
         self.pos = copy.copy(pos)
@@ -167,7 +165,6 @@ class PathVertex(Constraint):
     def __str__(self):
         return f't = {self.t}, p = {self.pos}'
     
-# Represents an Edge in a Path
 class PathEdge(Constraint):
     def __init__(self, p1: tuple, p2: tuple, t: int):
         self.p1 = copy.deepcopy(p1)
@@ -192,7 +189,6 @@ class PathEdge(Constraint):
     def __str__(self):
         return f't = {self.t}, p1 = {self.p1}, p2 = {self.p2}'
 
-# Path represents the trajectory of a single agent 
 class Path:
     def __init__(self, vertexes):
         self.vertexes = copy.deepcopy(vertexes)
@@ -237,8 +233,6 @@ class Path:
         for i in range(1,len(second)):
             new_path.insert(copy.copy(second.vertexes[i]))
         return new_path
-
-# Container for constraints to be implemented by a CBS Node 
         
 class Goal:
     def __init__(self):
@@ -316,7 +310,6 @@ class GridWorldActionGenerator(ActionGenerator):
                 if e not in self.constraints:
                     yield (u,e)
 
-# Represents a MAPF problem
 class MAPFProblem:
     def __init__(self, agent_ids, start_times, start_pos: dict, goals: dict):
         self.agent_ids = agent_ids
